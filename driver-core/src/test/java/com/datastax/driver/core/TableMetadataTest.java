@@ -38,6 +38,27 @@ public class TableMetadataTest extends CCMBridge.PerClassSingleNodeCluster {
     }
 
     @Test(groups = "short")
+    public void should_parse_table_with_udt() throws InterruptedException {
+        // given
+        session.execute(String.format("CREATE TYPE %s.u1 (f1 int, f2 text)", keyspace));
+        Thread.sleep(1000);
+        String cql = String.format("CREATE TABLE %s.t1 (\n"
+            + "    k text,\n"
+            + "    u frozen<u1>,\n"
+            + "    PRIMARY KEY (k)\n"
+            + ");", keyspace);
+        // when
+        session.execute(cql);
+        TableMetadata table = cluster.getMetadata().getKeyspace(keyspace).getTable("t1");
+        UserType udt1 = cluster.getMetadata().getKeyspace(keyspace).getUserType("u1");
+        // then
+        assertThat((DataType) udt1).isNotNull().isFrozen();
+        assertThat(table).isNotNull().hasName("t1").hasNumberOfColumns(2).isNotCompactStorage();
+        assertThat(table.getColumns().get(0)).isNotNull().hasName("k").isPartitionKey().hasType(text());
+        assertThat(table.getColumns().get(1)).isNotNull().hasName("u").isRegularColumn().hasType(udt1);
+    }
+
+    @Test(groups = "short")
     public void should_parse_table_without_clustering_columns() {
         // given
         String cql = String.format("CREATE TABLE %s.static (\n"

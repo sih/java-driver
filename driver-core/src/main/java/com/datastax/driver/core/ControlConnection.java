@@ -327,7 +327,7 @@ class ControlConnection implements Connection.Owner {
         }
 
         SchemaParser.forVersion(cassandraVersion)
-            .refresh(cluster.metadata,
+            .refresh(cluster.getCluster(),
                 targetType, targetKeyspace, targetName, targetSignature,
                 connection, cassandraVersion);
     }

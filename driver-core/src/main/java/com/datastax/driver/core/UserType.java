@@ -62,7 +62,10 @@ public class UserType extends DataType implements Iterable<UserType.Field>{
         this.byName = builder.build();
     }
 
-    static UserType build(Row row, ProtocolVersion protocolVersion, CodecRegistry codecRegistry) {
+    static UserType build(KeyspaceMetadata ksm, Row row, VersionNumber version, Cluster cluster) {
+        ProtocolVersion protocolVersion = cluster.getConfiguration().getProtocolOptions().getProtocolVersion();
+        CodecRegistry codecRegistry = cluster.getConfiguration().getCodecRegistry();
+
         String keyspace = row.getString(KeyspaceMetadata.KS_NAME);
         String name = row.getString(TYPE_NAME);
 
@@ -70,9 +73,15 @@ public class UserType extends DataType implements Iterable<UserType.Field>{
         List<String> fieldTypes = row.getList(COLS_TYPES, String.class);
 
         List<Field> fields = new ArrayList<Field>(fieldNames.size());
-        for (int i = 0; i < fieldNames.size(); i++)
-            fields.add(new Field(fieldNames.get(i), CassandraTypeParser.parseOne(fieldTypes.get(i), protocolVersion, codecRegistry)));
-
+        for (int i = 0; i < fieldNames.size(); i++) {
+            DataType fieldType;
+            if (version.getMajor() >= 3.0) {
+                fieldType = DataTypeParser.parse(fieldTypes.get(i), cluster.getMetadata(), ksm.getName(), false);
+            } else {
+                fieldType = CassandraTypeParser.parseOne(fieldTypes.get(i), protocolVersion, codecRegistry);
+            }
+            fields.add(new Field(fieldNames.get(i), fieldType));
+        }
         return new UserType(keyspace, name, fields, protocolVersion, codecRegistry);
     }
 
