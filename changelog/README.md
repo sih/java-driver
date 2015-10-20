@@ -2,8 +2,9 @@
 
 ### 3.0.0-beta1 (in progress)
 
- - [improvement] JAVA-958: Make TableOrView.Order visible.
- - [improvement] JAVA-968: Update metrics to the latest version.
+- [improvement] Make TableOrView.Order visible (JAVA-958)
+- [improvement] Update metrics to the latest version (JAVA-968)
+- [bug] Make type codecs invariant (JAVA-971)
 
 ### 3.0.0-alpha4
 

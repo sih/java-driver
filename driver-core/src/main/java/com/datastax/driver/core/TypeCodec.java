@@ -508,6 +508,14 @@ public abstract class TypeCodec<T> {
     /**
      * Return {@code true} if this codec is capable of serializing
      * the given {@code javaType}.
+     * <p>
+     * The default implementation is <em>invariant</em> with respect to the passed
+     * argument (through the usage of {@link TypeToken#equals(Object)}.
+     * This means that, by default, a codec will only ever accept the
+     * <em>exact</em> Java type that it has been created for.
+     * <p>
+     * If the argument represents a Java primitive type, its wrapper type
+     * is considered instead.
      *
      * @param javaType The Java type this codec should serialize from and deserialize to; cannot be {@code null}.
      * @return {@code true} if the codec is capable of serializing
@@ -519,7 +527,7 @@ public abstract class TypeCodec<T> {
         if (javaType.isPrimitive()) {
             javaType = primitiveToWrapperMap.get(javaType);
         }
-        return this.javaType.isAssignableFrom(javaType);
+        return this.javaType.equals(javaType);
     }
 
     /**
@@ -548,6 +556,10 @@ public abstract class TypeCodec<T> {
      * <p>
      * Implementation notes:
      * <ol>
+     * <li>The default implementation is <em>covariant</em> with respect to the passed
+     * argument (through the usage of {@link TypeToken#isAssignableFrom(TypeToken)}.
+     * This means that, by default, a codec will accept
+     * <em>any subtype</em> of the Java type that it has been created for.</li>
      * <li>The base implementation provided here can only handle non-parameterized types;
      * codecs handling parameterized types, such as collection types, must override
      * this method and perform some sort of "manual"
@@ -565,7 +577,7 @@ public abstract class TypeCodec<T> {
      */
     public boolean accepts(Object value) {
         checkNotNull(value);
-        return accepts(TypeToken.of(value.getClass()));
+        return this.javaType.isAssignableFrom(TypeToken.of(value.getClass()));
     }
 
     @Override

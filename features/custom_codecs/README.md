@@ -374,6 +374,212 @@ Foo<Bar> foo = row.get(0, new TypeToken<Foo<Bar>>(){})
 Foo<Bar> foo = row.get(0, Foo.class);
 ```
 
+### Support for subtype polymorphism
+
+Suppose the following class hierarchy:
+
+```java
+class A {}
+class B extends A {}
+```
+
+By default, a codec will accept to serialize any object that extends or
+implements its declared Java type: a codec such as
+`ACodec extends TypeCodec<A>` will accept `B` instances as well.
+
+This allows a codec to handle interfaces and superclasses
+in a generic way, regardless of the actual implementation being
+used by client code; for example, the driver has a built-in codec
+that handles `List` instances, and this codec is capable of
+serializing any concrete `List` implementation.
+
+But this has one caveat: when setting or retrieving values
+with `get()` and `set()`, *it is vital to pass the exact 
+Java type the codec handles*.
+
+The following example works:
+
+```java
+codecRegistry.register(new ACodec());
+BoundStatement bs = ...;
+bs.set(0, new A(), A.class);
+bs.set(0, new B(), A.class); // ACodec accepts B, but is declared with A
+```
+
+But the following doesn't:
+
+```java
+codecRegistry.register(new ACodec());
+BoundStatement bs = ...;
+bs.set(0, new B(), B.class); // throws CodecNotFoundException
+```
+
+The same is valid when retrieving values:
+
+```java
+codecRegistry.register(new ACodec());
+Row row = ...
+A a = row.get(0, A.class); // works
+B b = row.get(0, B.class); // throws CodecNotFoundException
+```
+
+Another anti-pattern that is strongly discouraged is to register a codec for
+a Java type and another codec for one of its superclasses or superinterfaces.
+In this situation, the registry will choose the first registered one,
+*even if the other one is a better match*.
+
+For example, if there are registered codecs for both `A` and `B`
+(i.e. `ACodec extends TypeCodec<A>` and `BCodec extends TypeCodec<B>`),
+when looking for a codec accepting `A` instances, which codec the registry will choose
+will depend on their registration order. This can lead to unpredictable results
+and runtime errors, and thus should always be avoided.
+
+#### Strategies for mapping polymorphic data models
+
+Let's consider the following class hierarchy:
+
+```java
+public abstract class Animal {...}
+
+public class Cat extends Animal {...}
+
+public class Dog extends Animal {...}
+```
+
+Let's also assume that instances of this hierarchy are to be
+serialized in some manner and stored in a CQL `BLOB` column;
+the actual serialization mechanism is irrelevant here.
+
+##### One codec per class hierarchy
+
+The simplest way to handle the data model above would be
+to declare one single codec for the entire hierarchy:
+
+```java
+public class AnimalCodec extends TypeCodec<Animal> {
+
+    protected AnimalCodec() {
+        super(DataType.blob(), Animal.class);
+    }
+
+    @Override
+    public ByteBuffer serialize(Animal value, ProtocolVersion protocolVersion) throws InvalidTypeException {
+        if (value instanceof Cat)
+            return ...
+        else if (value instanceof Dog)
+            return ...
+        else
+            throw new InvalidTypeException("Unknown animal");
+    }
+
+    @Override
+    public Animal deserialize(ByteBuffer bytes, ProtocolVersion protocolVersion) throws InvalidTypeException {
+        if (isCat(bytes))
+            return new Cat();
+        else if (isDog(bytes))
+            return new Dog();
+        else
+            throw new InvalidTypeException("Unknown animal");
+    }
+
+    // other methods omitted
+}
+```
+
+Here is some code showing how to store and retrieve `Animal` instances using this strategy:
+
+```java
+codecRegistry.register(new AnimalCodec());
+
+// serializing
+BoundStatement bs = ...;
+session.execute(bs.set(0, new Cat(), Animal.class));
+session.execute(bs.set(0, new Dog(), Animal.class));
+
+// deserializing
+ResultSet rs = session.execute(...);
+Animal a1 = rs.one().get(0, Animal.class);
+Animal a2 = rs.one().get(0, Animal.class);
+```
+
+Note that, with this strategy, it is up to client code to 
+downcast `Animal` instances if necessary:
+
+```java
+if (a1 instanceof Cat)
+    ((Cat) a1).meow();
+```
+
+Also note that the following code compiles, but throws a 
+`CodecNotFoundException` at runtime because the driver has no
+registered codec specifically targeting `Cat`:
+
+```java
+Cat cat = rs.one().get(0, Cat.class); // throws CodecNotFoundException
+```
+
+The main drawback of this approach is that the codec needs to "know" upfront how to handle
+all subclasses of `Animal`, making it sensitive to changes in the hierarchy,
+which could compromise its maintainability.
+This strategy is hence best suited for small class hierarchies that do not change often.
+
+##### One codec per concrete subclass
+
+Another alternative is to declare different codecs for each concrete subclass, e.g. for `Cat`:
+
+```java
+public class CatCodec extends TypeCodec<Cat> {
+
+    protected CatCodec() {
+        super(DataType.blob(), Cat.class);
+    }
+
+    @Override
+    public ByteBuffer serialize(Cat value, ProtocolVersion protocolVersion) throws InvalidTypeException {
+        return ...;
+    }
+
+    @Override
+    public Cat deserialize(ByteBuffer bytes, ProtocolVersion protocolVersion) throws InvalidTypeException {
+        return ...;
+    }
+
+    // other methods omitted
+}
+```
+
+Here is some code showing how to store and retrieve `Animal` instances using this strategy:
+
+```java
+codecRegistry.register(new CatCodec());
+codecRegistry.register(new DogCodec());
+
+// serializing
+BoundStatement bs = ...;
+bs.set(0, new Cat(), Cat.class)); // column 0 contains only Cat instances
+bs.set(1, new Dog(), Dog.class)); // column 1 contains only Dog instances
+session.execute(bs);
+
+// deserializing
+ResultSet rs = session.execute(...);
+Row row = rs.one();
+Cat cat = row.get(0, Cat.class);
+Dog dog = row.get(1, Dog.class);
+```
+
+Note that the following code compiles, but throws a `CodecNotFoundException`
+because the driver does not know anything about the supertype `Animal`:
+
+```java
+Animal cat = row.get(0, Animal.class); // throws CodecNotFoundException
+```
+
+This strategy is probably more resilient to evolutions in the class hierarchy
+but it also has a drawback: it disallows the storage of heterogeneous
+`Animal` instances in the same CQL column. Use this strategy only if you
+never mix different subclasses in the same CQL column,
+and you know upfront which exact subclass is stored in a given CQL column.
+
 ### Performance considerations
 
 A codec lookup operation may be costly; to mitigate this, the `CodecRegistry` 
@@ -390,8 +596,8 @@ and if so, adds it to the cache and returns it;
 4. if the creation succeeds, the registry adds the created codec to the cache and returns it;
 5. otherwise, the registry throws [CodecNotFoundException].
 
-The cache can be used as long as _at least the CQL type is known_. The following situations 
-are exceptions where it is _not_ possible to cache lookup results:
+The cache can be used as long as *at least the CQL type is known*. The following situations 
+are exceptions where it is *not* possible to cache lookup results:
 
 * With [SimpleStatement] instances;
 * With [BuiltStatement] instances (created via the Query Builder).
