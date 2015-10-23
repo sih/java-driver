@@ -3,7 +3,10 @@
 ### 3.0.0-beta1 (in progress)
 
  - [improvement] JAVA-958: Make TableOrView.Order visible.
+ - [improvement] Log a warning when an older version of guava (<16.01) is 
+   found (JAVA-961)
  - [improvement] JAVA-968: Update metrics to the latest version.
+
 
 ### 3.0.0-alpha4
 
