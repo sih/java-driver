@@ -19,6 +19,7 @@ import java.lang.ref.WeakReference;
 import java.net.InetSocketAddress;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -26,6 +27,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Lists;
 import com.google.common.collect.MapMaker;
 import com.google.common.util.concurrent.*;
 import io.netty.bootstrap.Bootstrap;
@@ -158,7 +160,7 @@ class Connection {
                                 logger.debug(String.format("%s Error connecting to %s%s", Connection.this, Connection.this.address, extractMessage(future.cause())));
                             channelReadyFuture.setException(new TransportException(Connection.this.address, "Cannot connect", future.cause()));
                         } else {
-                            logger.debug("{} Connection opened successfully", Connection.this);
+                            logger.debug("{} Connection established, initializing transport", Connection.this);
                             channel.closeFuture().addListener(new ChannelCloseListener());
                             channelReadyFuture.set(null);
                         }
@@ -174,6 +176,7 @@ class Connection {
 
         ListenableFuture<Void> initializeTransportFuture = Futures.transform(channelReadyFuture,
             onChannelReady(protocolVersion, initExecutor), initExecutor);
+
 
         // Fallback on initializeTransportFuture so we can properly propagate specific exceptions.
         ListenableFuture<Void> initFuture = Futures.withFallback(initializeTransportFuture, new FutureFallback<Void>() {
@@ -198,16 +201,8 @@ class Connection {
             }
         }, initExecutor);
 
-        // If initFuture fails, close the connection.  This is needed as withFallback doesn't account for cancel.
-        Futures.addCallback(initFuture, new FutureCallback<Void>() {
-            @Override
-            public void onSuccess(Void result) {
-                Host host = factory.manager.metadata.getHost(address);
-                if (host != null)
-                    host.convictionPolicy.signalConnectionCreated();
-                isInitialized = true;
-            }
-
+        // Ensure the connection gets closed if the caller cancels the returned future.
+        Futures.addCallback(initFuture, new MoreFutures.FailureCallback<Void>() {
             @Override
             public void onFailure(Throwable t) {
                 if (!isClosed()) {
@@ -279,8 +274,10 @@ class Connection {
         final String expected = factory.manager.metadata.clusterName;
 
         // At initialization, the cluster is not known yet
-        if (expected == null)
+        if (expected == null) {
+            markInitialized();
             return MoreFutures.VOID_SUCCESS;
+        }
 
         DefaultResultSetFuture clusterNameFuture = new DefaultResultSetFuture(null,new Requests.Query("select cluster_name from system.local"));
         try {
@@ -293,12 +290,18 @@ class Connection {
                         String actual = row.getString("cluster_name");
                         if (!expected.equals(actual))
                             throw new ClusterNameMismatchException(address, actual, expected);
+                        markInitialized();
                         return MoreFutures.VOID_SUCCESS;
                     }
                 }, executor);
         } catch (Exception e) {
             return Futures.immediateFailedFuture(e);
         }
+    }
+
+    private void markInitialized() {
+        isInitialized = true;
+        Host.statesLogger.debug("[{}] {} Transport initialized, connection ready", address, this);
     }
 
     private ListenableFuture<Void> authenticateV1(Authenticator authenticator, final Executor executor) {
@@ -404,7 +407,7 @@ class Connection {
 
         Host host = factory.manager.metadata.getHost(address);
         if (host != null) {
-            boolean isDown = factory.manager.signalConnectionFailure(host, ce, isInitialized, host.wasJustAdded());
+            boolean isDown = factory.manager.signalConnectionFailure(host, this, host.wasJustAdded());
 
             if (!isDown)
                 notifyOwnerWhenDefunct();
@@ -625,10 +628,10 @@ class Connection {
 
         logger.debug("{} closing connection", this);
 
-        if (isInitialized && !isDefunct.get()) {
+        if (!isDefunct.get()) {
             Host host = factory.manager.metadata.getHost(address);
             if(host != null)
-                host.convictionPolicy.signalConnectionClosed();
+                host.convictionPolicy.signalConnectionClosed(this);
         }
 
         boolean terminated = tryTerminate(false);
@@ -728,8 +731,8 @@ class Connection {
             if (isShutdown)
                 throw new ConnectionException(address, "Connection factory is shut down");
 
-            String name = address.toString() + '-' + getIdGenerator(host).getAndIncrement();
-            Connection connection = new Connection(name, address, this);
+            host.convictionPolicy.signalConnectionsOpening(1);
+            Connection connection = new Connection(buildConnectionName(host), address, this);
             // This method opens the connection synchronously, so wait until it's initialized
             try {
                 connection.initAsync().get();
@@ -743,8 +746,9 @@ class Connection {
          * Same as open, but associate the created connection to the provided connection pool.
          */
         public Connection open(HostConnectionPool pool) throws ConnectionException, InterruptedException, UnsupportedProtocolVersionException, ClusterNameMismatchException {
+            pool.host.convictionPolicy.signalConnectionsOpening(1);
+            Connection connection = new Connection(buildConnectionName(pool.host), pool.host.getSocketAddress(), this, pool);
             try {
-                Connection connection = newConnection(pool);
                 connection.initAsync().get();
                 return connection;
             } catch (ExecutionException e) {
@@ -753,13 +757,18 @@ class Connection {
         }
 
         /**
-         * Creates a new connection and associates it to the provided connection pool, but does not start it.
+         * Creates new connections and associate them to the provided connection pool, but does not start them.
          */
-        public Connection newConnection(HostConnectionPool pool) {
-            InetSocketAddress address = pool.host.getSocketAddress();
-            String name = address.toString() + '-' + getIdGenerator(pool.host).getAndIncrement();
+        public List<Connection> newConnections(HostConnectionPool pool, int count) {
+            pool.host.convictionPolicy.signalConnectionsOpening(count);
+            List<Connection> connections = Lists.newArrayListWithCapacity(count);
+            for (int i = 0; i < count; i++)
+                connections.add(new Connection(buildConnectionName(pool.host), pool.host.getSocketAddress(), this, pool));
+            return connections;
+        }
 
-            return new Connection(name, address, this, pool);
+        private String buildConnectionName(Host host) {
+            return host.getSocketAddress().toString() + '-' + getIdGenerator(host).getAndIncrement();
         }
 
         static RuntimeException launderAsyncInitException(ExecutionException e) throws ConnectionException, InterruptedException, UnsupportedProtocolVersionException, ClusterNameMismatchException {
