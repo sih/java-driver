@@ -13,7 +13,7 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  */
-package com.datastax.driver.core;
+package com.datastax.driver.extras.codecs.enums;
 
 import java.util.Collection;
 import java.util.List;
@@ -29,24 +29,24 @@ import static com.google.common.collect.Lists.newArrayList;
 import static com.google.common.collect.Sets.newHashSet;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.datastax.driver.core.*;
 import com.datastax.driver.core.utils.CassandraVersion;
 
 import static com.datastax.driver.core.DataType.cint;
 import static com.datastax.driver.core.DataType.text;
-import static com.datastax.driver.core.TypeCodecEnumIntegrationTest.Foo.*;
-import static com.datastax.driver.core.TypeCodecEnumIntegrationTest.Bar.*;
+import static com.datastax.driver.extras.codecs.enums.EnumCodecsTest.Foo.*;
+import static com.datastax.driver.extras.codecs.enums.EnumCodecsTest.Bar.*;
 
 /**
- * A test that validates that Enums are correctly mapped to varchars (with the default EnumStringCodec)
- * or alternatively to ints (with the alternative EnumIntCodec).
+ * A test that validates that Enums are correctly mapped to varchars (with EnumStringCodec)
+ * and ints (with EnumIntCodec).
  * It also validates that both codecs may coexist in the same CodecRegistry.
  */
 @CassandraVersion(major=2.1)
-public class TypeCodecEnumIntegrationTest extends CCMBridge.PerClassSingleNodeCluster {
+public class EnumCodecsTest extends CCMBridge.PerClassSingleNodeCluster {
 
-    private final String insertQuery = "INSERT INTO \"myTable\" (pk, foo, foos, bar, bars, foobars, tup, udt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-
-    private final String selectQuery = "SELECT pk, foo, foos, bar, bars, foobars, tup, udt FROM \"myTable\" WHERE pk = ?";
+    private final String insertQuery = "INSERT INTO t1 (pk, foo, foos, bar, bars, foobars, tup, udt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+    private final String selectQuery = "SELECT pk, foo, foos, bar, bars, foobars, tup, udt FROM t1 WHERE pk = ?";
 
     private final int pk = 42;
 
@@ -60,10 +60,10 @@ public class TypeCodecEnumIntegrationTest extends CCMBridge.PerClassSingleNodeCl
     @Override
     protected Collection<String> getTableDefinitions() {
         return newArrayList(
-            "CREATE TYPE IF NOT EXISTS \"myType\" ("
+            "CREATE TYPE IF NOT EXISTS udt1 ("
                 + "foo int,"
                 + "bar text)",
-            "CREATE TABLE IF NOT EXISTS \"myTable\" ("
+            "CREATE TABLE IF NOT EXISTS t1 ("
                 + "pk int PRIMARY KEY, "
                 + "foo int, "
                 + "foos list<int>, "
@@ -71,7 +71,7 @@ public class TypeCodecEnumIntegrationTest extends CCMBridge.PerClassSingleNodeCl
                 + "bars set<text>, "
                 + "foobars map<int,text>, "
                 + "tup frozen<tuple<int,varchar>>, "
-                + "udt frozen<\"myType\">"
+                + "udt frozen<udt1>"
                 + ")"
         );
     }
@@ -91,7 +91,7 @@ public class TypeCodecEnumIntegrationTest extends CCMBridge.PerClassSingleNodeCl
         tupleValue = tup.newValue()
             .set(0, FOO_1, Foo.class)
             .set(1, BAR_1, Bar.class);
-        UserType udt = cluster.getMetadata().getKeyspace(keyspace).getUserType("\"myType\"");
+        UserType udt = cluster.getMetadata().getKeyspace(keyspace).getUserType("udt1");
         udtValue = udt.newValue()
             .set("foo", FOO_1, Foo.class)
             .set("bar", BAR_1, Bar.class);
