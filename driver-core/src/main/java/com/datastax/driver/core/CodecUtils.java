@@ -28,11 +28,12 @@ import com.datastax.driver.core.exceptions.InvalidTypeException;
 /**
  * A set of utility methods to deal with type conversion,
  * serialization, and to create {@link TypeToken} instances.
- * <p>
- * This class is public because it is accessed from {@link com.datastax.driver.core.querybuilder.BuiltStatement}
- * but its use by client code is not supported.
  */
 public final class CodecUtils {
+
+    private static final long MAX_LONG_VALUE = ((1L << 32) - 1);
+
+    private static final long EPOCH_AS_CQL_LONG = (1L << 31);
 
     private CodecUtils(){}
 
@@ -65,42 +66,183 @@ public final class CodecUtils {
     }
 
     /**
-     * Propagate a CodecRegistry instance to a given type and its child types, if any.
-     * <p>
-     * By the time CQL types are decoded from response messages, the codec registry is not available;
-     * This method manually sets a CodecRegistry on all CQL types that require it,
-     * and thus should be called immediately after a response is decoded
-     * into either a prepared statement or a result set.
+     * Utility method that "packs" together a list of {@link ByteBuffer}s containing
+     * serialized collection elements.
+     * Mainly intended for use with collection codecs when serializing collections.
      *
-     * @param cqlType The decodec {@link DataType cqlType}.
-     * @param codecRegistry The {@link CodecRegistry} instance to use.
+     * @param buffers the collection elements
+     * @param elements the total number of elements
+     * @param version the protocol version to use
+     * @return The serialized collection
      */
-    static void setCodecRegistry(DataType cqlType, CodecRegistry codecRegistry) {
-        // user types
-        if(cqlType instanceof UserType) {
-            UserType userType = (UserType)cqlType;
-            userType.setCodecRegistry(codecRegistry);
-            for (UserType.Field field : userType.byIdx) {
-                setCodecRegistry(field.getType(), codecRegistry);
-            }
+    public static ByteBuffer pack(List<ByteBuffer> buffers, int elements, ProtocolVersion version) {
+        int size = 0;
+        for (ByteBuffer bb : buffers) {
+            int elemSize = sizeOfValue(bb, version);
+            size += elemSize;
         }
-        // tuples
-        else if(cqlType instanceof TupleType) {
-            TupleType tupleType = (TupleType)cqlType;
-            tupleType.setCodecRegistry(codecRegistry);
-            for (DataType componentType : tupleType.getComponentTypes()) {
-                setCodecRegistry(componentType, codecRegistry);
-            }
-        }
-        // collections
-        else if(cqlType.isCollection()) {
-            for (DataType inner : cqlType.getTypeArguments()) {
-                setCodecRegistry(inner, codecRegistry);
-            }
+        ByteBuffer result = ByteBuffer.allocate(sizeOfCollectionSize(version) + size);
+        writeSize(result, elements, version);
+        for (ByteBuffer bb : buffers)
+            writeValue(result, bb, version);
+        return (ByteBuffer)result.flip();
+    }
+
+    /**
+     * Utility method that reads a size value.
+     * Mainly intended for collection codecs when deserializing CQL collections.
+     * @param input The ByteBuffer to read from.
+     * @param version The protocol version to use.
+     * @return The size value.
+     */
+    public static int readSize(ByteBuffer input, ProtocolVersion version) {
+        switch (version) {
+            case V1:
+            case V2:
+                return getUnsignedShort(input);
+            case V3:
+            case V4:
+                return input.getInt();
+            default:
+                throw version.unsupported();
         }
     }
 
     /**
+     * Utility method that writes a size value.
+     * Mainly intended for collection codecs when serializing CQL collections.
+     *
+     * @param output The ByteBuffer to write to.
+     * @param size The collection size.
+     * @param version The protocol version to use.
+     */
+    public static void writeSize(ByteBuffer output, int size, ProtocolVersion version) {
+        switch (version) {
+            case V1:
+            case V2:
+                if (size > 65535)
+                    throw new IllegalArgumentException(String.format("Native protocol version %d supports up to 65535 elements in any collection - but collection contains %d elements", version.toInt(), size));
+                output.putShort((short)size);
+                break;
+            case V3:
+            case V4:
+                output.putInt(size);
+                break;
+            default:
+                throw version.unsupported();
+        }
+    }
+
+    /**
+     * Utility method that reads a value.
+     * Mainly intended for collection codecs when deserializing CQL collections.
+     *
+     * @param input The ByteBuffer to read from.
+     * @param version The protocol version to use.
+     * @return The collection element.
+     */
+    public static ByteBuffer readValue(ByteBuffer input, ProtocolVersion version) {
+        int size = readSize(input, version);
+        return size < 0 ? null : readBytes(input, size);
+    }
+
+    /**
+     * Utility method that writes a value.
+     * Mainly intended for collection codecs when deserializing CQL collections.
+
+     * @param output The ByteBuffer to write to.
+     * @param value The value to write.
+     * @param version The protocol version to use.
+     */
+    public static void writeValue(ByteBuffer output, ByteBuffer value, ProtocolVersion version) {
+        switch (version) {
+            case V1:
+            case V2:
+                assert value != null;
+                output.putShort((short)value.remaining());
+                output.put(value.duplicate());
+                break;
+            case V3:
+            case V4:
+                if (value == null) {
+                    output.putInt(-1);
+                } else {
+                    output.putInt(value.remaining());
+                    output.put(value.duplicate());
+                }
+                break;
+            default:
+                throw version.unsupported();
+        }
+    }
+
+    /**
+     * Read {@code length} bytes from {@code bb} into a new ByteBuffer.
+     *
+     * @param bb The ByteBuffer to read.
+     * @param length The number of bytes to read.
+     * @return The read bytes.
+     */
+    public static ByteBuffer readBytes(ByteBuffer bb, int length) {
+        ByteBuffer copy = bb.duplicate();
+        copy.limit(copy.position() + length);
+        bb.position(bb.position() + length);
+        return copy;
+    }
+
+    /**
+     * Converts an "unsigned" int read from a DATE value into a signed int.
+     * <p>
+     * The protocol encodes DATE values as <em>unsigned</em> ints with the Epoch in the middle of the range (2^31).
+     * This method handles the conversion from an "unsigned" to a signed int.
+     */
+    public static int fromUnsignedToSignedInt(int unsigned) {
+        return unsigned + Integer.MIN_VALUE; // this relies on overflow for "negative" values
+    }
+
+    /**
+     * Converts an int into an "unsigned" int suitable to be written as a DATE value.
+     * <p>
+     * The protocol encodes DATE values as <em>unsigned</em> ints with the Epoch in the middle of the range (2^31).
+     * This method handles the conversion from a signed to an "unsigned" int.
+     */
+    public static int fromSignedToUnsignedInt(int signed) {
+        return signed - Integer.MIN_VALUE;
+    }
+
+    /**
+     * Convert from a raw CQL long representing a numeric DATE literal
+     * to the number of days since the Epoch.
+     * In CQL, numeric DATE literals are longs between 0 and 2^32 - 1, with the epoch in the middle;
+     * this method takes the given long and re-center the epoch at 0.
+     *
+     * @param raw The CQL date value to convert.
+     * @return The number of days since the Epoch corresponding to the given raw value.
+     * @throws IllegalArgumentException if the value is out of range.
+     */
+    public static int toDaysSinceEpoch(long raw) {
+        if (raw < 0 || raw > MAX_LONG_VALUE)
+            throw new IllegalArgumentException(String.format("Numeric literals for DATE must be between 0 and %d (got %d)", MAX_LONG_VALUE, raw));
+        return (int)(raw - EPOCH_AS_CQL_LONG);
+    }
+
+    /**
+     * Convert the number of days since the Epoch into
+     * a raw CQL long representing a numeric DATE literal.
+     *
+     * In CQL, numeric DATE literals are longs between 0 and 2^32 - 1, with the epoch in the middle;
+     * this method takes the given long and re-center the epoch at 0.
+     *
+     * @param days The number of days since the Epoch convert.
+     * @return The CQL date value corresponding to the given value.
+     */
+    public static long fromDaysSinceEpoch(int days) {
+        return ((long)days + EPOCH_AS_CQL_LONG);
+    }
+
+    /**
+     * <strong>This method is not intended for use by client code.</strong>
+     * <p>
      * Utility method to serialize user-provided values.
      * <p>
      * This method is useful in situations where there is no metadata available and the underlying CQL
@@ -146,6 +288,8 @@ public final class CodecUtils {
     }
 
     /**
+     * <strong>This method is not intended for use by client code.</strong>
+     * <p>
      * Utility method to assemble different routing key components into a single {@link ByteBuffer}.
      * Mainly intended for statements that need to generate a routing key out of their current values.
      *
@@ -171,96 +315,6 @@ public final class CodecUtils {
         return out;
     }
 
-    private static void putShortLength(ByteBuffer bb, int length) {
-        bb.put((byte)((length >> 8) & 0xFF));
-        bb.put((byte)(length & 0xFF));
-    }
-
-    /**
-     * Utility method that "packs" together a list of {@link ByteBuffer}s containing
-     * serialized collection elements.
-     * Mainly intended for use with collection codecs when serializing collections.
-     *
-     * @param buffers the collection elements
-     * @param elements the total number of elements
-     * @param version the protocol version to use
-     * @return The serialized collection
-     */
-    public static ByteBuffer pack(List<ByteBuffer> buffers, int elements, ProtocolVersion version) {
-        int size = 0;
-        for (ByteBuffer bb : buffers) {
-            int elemSize = sizeOfValue(bb, version);
-            size += elemSize;
-        }
-        ByteBuffer result = ByteBuffer.allocate(sizeOfCollectionSize(version) + size);
-        writeCollectionSize(result, elements, version);
-        for (ByteBuffer bb : buffers)
-            writeCollectionValue(result, bb, version);
-        return (ByteBuffer)result.flip();
-    }
-
-    /**
-     * Utility method that reads the collection size.
-     * Mainly intended for collection codecs when deserializing CQL collections.
-     * @param input A ByteBuffer containing a serialized CQL collection
-     * @param version The protocol version to use.
-     * @return The collection size
-     */
-    public static int readCollectionSize(ByteBuffer input, ProtocolVersion version) {
-        switch (version) {
-            case V1:
-            case V2:
-                return getUnsignedShort(input);
-            case V3:
-            case V4:
-                return input.getInt();
-            default:
-                throw version.unsupported();
-        }
-    }
-
-    public static ByteBuffer readBytes(ByteBuffer bb, int length) {
-        ByteBuffer copy = bb.duplicate();
-        copy.limit(copy.position() + length);
-        bb.position(bb.position() + length);
-        return copy;
-    }
-
-    public static ByteBuffer readCollectionValue(ByteBuffer input, ProtocolVersion version) {
-        int size;
-        switch (version) {
-            case V1:
-            case V2:
-                size = getUnsignedShort(input);
-                break;
-            case V3:
-            case V4:
-                size = input.getInt();
-                break;
-            default:
-                throw version.unsupported();
-        }
-        return size < 0 ? null : readBytes(input, size);
-    }
-
-
-    private static void writeCollectionSize(ByteBuffer output, int elements, ProtocolVersion version) {
-        switch (version) {
-            case V1:
-            case V2:
-                if (elements > 65535)
-                    throw new IllegalArgumentException(String.format("Native protocol version %d supports up to 65535 elements in any collection - but collection contains %d elements", version.toInt(), elements));
-                output.putShort((short)elements);
-                break;
-            case V3:
-            case V4:
-                output.putInt(elements);
-                break;
-            default:
-                throw version.unsupported();
-        }
-    }
-
     private static int sizeOfCollectionSize(ProtocolVersion version) {
         switch (version) {
             case V1:
@@ -269,28 +323,6 @@ public final class CodecUtils {
             case V3:
             case V4:
                 return 4;
-            default:
-                throw version.unsupported();
-        }
-    }
-
-    private static void writeCollectionValue(ByteBuffer output, ByteBuffer value, ProtocolVersion version) {
-        switch (version) {
-            case V1:
-            case V2:
-                assert value != null;
-                output.putShort((short)value.remaining());
-                output.put(value.duplicate());
-                break;
-            case V3:
-            case V4:
-                if (value == null) {
-                    output.putInt(-1);
-                } else {
-                    output.putInt(value.remaining());
-                    output.put(value.duplicate());
-                }
-                break;
             default:
                 throw version.unsupported();
         }
@@ -310,6 +342,11 @@ public final class CodecUtils {
             default:
                 throw version.unsupported();
         }
+    }
+
+    private static void putShortLength(ByteBuffer bb, int length) {
+        bb.put((byte)((length >> 8) & 0xFF));
+        bb.put((byte)(length & 0xFF));
     }
 
     private static int getUnsignedShort(ByteBuffer bb) {
