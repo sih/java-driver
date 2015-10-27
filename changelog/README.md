@@ -2,8 +2,12 @@
 
 ### 3.0.0-beta1 (in progress)
 
- - [improvement] JAVA-958: Make TableOrView.Order visible.
- - [improvement] JAVA-968: Update metrics to the latest version.
+- [improvement] Make TableOrView.Order visible (JAVA-958)
+- [improvement] Update metrics to the latest version (JAVA-968)
+- [new feature] Provide custom codecs library as an extra module (JAVA-846)
+- [new feature] Codec support for Java 8 (JAVA-606)
+- [new feature] Codec support for Java arrays (JAVA-565)
+- [new feature] Codec Support for JSON (JAVA-742)
 
 ### 3.0.0-alpha4
 
