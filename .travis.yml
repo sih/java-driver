@@ -3,3 +3,12 @@ jdk:
   - openjdk6
   - oraclejdk7
   - oraclejdk8
+install: true
+before_script:
+  - version=$($JAVA_HOME/bin/java -version 2>&1 | awk -F '"' '/version/ {print $2}')
+  - export LEGACY_JDK="$(if [[ $version == 1.6* || $version == 1.7* ]]; then echo true; else echo false; fi)"
+script:
+  - jdk_switcher use oraclejdk8
+  - mvn compile
+  - jdk_switcher use default
+  - mvn test -DlegacyJdk=$LEGACY_JDK
