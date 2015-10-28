@@ -23,7 +23,7 @@ import com.google.common.reflect.TypeToken;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class SanityChecks {
+public class SanityChecks {
     private static final Logger logger = LoggerFactory.getLogger(SanityChecks.class);
 
     /**
