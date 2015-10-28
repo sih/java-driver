@@ -760,7 +760,7 @@ public abstract class TypeCodec<T> {
 
         @Override
         public String parse(String value) {
-            if (value == null || value.isEmpty() || value.equals("NULL"))
+            if (value == null || value.isEmpty() || value.equalsIgnoreCase("NULL"))
                 return null;
             if (value.charAt(0) != '\'' || value.charAt(value.length() - 1) != '\'')
                 throw new InvalidTypeException("text or varchar values must be enclosed by single quotes");
@@ -844,7 +844,7 @@ public abstract class TypeCodec<T> {
         @Override
         public Long parse(String value) {
             try {
-                return value == null || value.isEmpty() || value.equals("NULL") ? null : Long.parseLong(value);
+                return value == null || value.isEmpty() || value.equalsIgnoreCase("NULL") ? null : Long.parseLong(value);
             } catch (NumberFormatException e) {
                 throw new InvalidTypeException(String.format("Cannot parse 64-bits long value from \"%s\"", value));
             }
@@ -914,7 +914,7 @@ public abstract class TypeCodec<T> {
 
         @Override
         public ByteBuffer parse(String value) {
-            return value == null || value.isEmpty() || value.equals("NULL") ? null : Bytes.fromHexString(value);
+            return value == null || value.isEmpty() || value.equalsIgnoreCase("NULL") ? null : Bytes.fromHexString(value);
         }
 
         @Override
@@ -949,7 +949,7 @@ public abstract class TypeCodec<T> {
 
         @Override
         public ByteBuffer parse(String value) {
-            return value == null || value.isEmpty() || value.equals("NULL") ? null : Bytes.fromHexString(value);
+            return value == null || value.isEmpty() || value.equalsIgnoreCase("NULL") ? null : Bytes.fromHexString(value);
         }
 
         @Override
@@ -986,7 +986,7 @@ public abstract class TypeCodec<T> {
 
         @Override
         public Boolean parse(String value) {
-            if (value == null || value.isEmpty() || value.equals("NULL"))
+            if (value == null || value.isEmpty() || value.equalsIgnoreCase("NULL"))
                 return null;
             if (value.equalsIgnoreCase(Boolean.FALSE.toString()))
                 return false;
@@ -1033,7 +1033,7 @@ public abstract class TypeCodec<T> {
         @Override
         public BigDecimal parse(String value) {
             try {
-                return value == null || value.isEmpty() || value.equals("NULL") ? null : new BigDecimal(value);
+                return value == null || value.isEmpty() || value.equalsIgnoreCase("NULL") ? null : new BigDecimal(value);
             } catch (NumberFormatException e) {
                 throw new InvalidTypeException(String.format("Cannot parse decimal value from \"%s\"", value));
             }
@@ -1092,7 +1092,7 @@ public abstract class TypeCodec<T> {
         @Override
         public Double parse(String value) {
             try {
-                return value == null || value.isEmpty() || value.equals("NULL") ? null : Double.parseDouble(value);
+                return value == null || value.isEmpty() || value.equalsIgnoreCase("NULL") ? null : Double.parseDouble(value);
             } catch (NumberFormatException e) {
                 throw new InvalidTypeException(String.format("Cannot parse 64-bits double value from \"%s\"", value));
             }
@@ -1137,7 +1137,7 @@ public abstract class TypeCodec<T> {
         @Override
         public Float parse(String value) {
             try {
-                return value == null || value.isEmpty() || value.equals("NULL") ? null : Float.parseFloat(value);
+                return value == null || value.isEmpty() || value.equalsIgnoreCase("NULL") ? null : Float.parseFloat(value);
             } catch (NumberFormatException e) {
                 throw new InvalidTypeException(String.format("Cannot parse 32-bits float value from \"%s\"", value));
             }
@@ -1181,7 +1181,7 @@ public abstract class TypeCodec<T> {
 
         @Override
         public InetAddress parse(String value) {
-            if (value == null || value.isEmpty() || value.equals("NULL"))
+            if (value == null || value.isEmpty() || value.equalsIgnoreCase("NULL"))
                 return null;
 
             value = value.trim();
@@ -1232,7 +1232,7 @@ public abstract class TypeCodec<T> {
         @Override
         public Byte parse(String value) {
             try {
-                return value == null || value.isEmpty() || value.equals("NULL") ? null : Byte.parseByte(value);
+                return value == null || value.isEmpty() || value.equalsIgnoreCase("NULL") ? null : Byte.parseByte(value);
             } catch (NumberFormatException e) {
                 throw new InvalidTypeException(String.format("Cannot parse 8-bits int value from \"%s\"", value));
             }
@@ -1277,7 +1277,7 @@ public abstract class TypeCodec<T> {
         @Override
         public Short parse(String value) {
             try {
-                return value == null || value.isEmpty() || value.equals("NULL") ? null : Short.parseShort(value);
+                return value == null || value.isEmpty() || value.equalsIgnoreCase("NULL") ? null : Short.parseShort(value);
             } catch (NumberFormatException e) {
                 throw new InvalidTypeException(String.format("Cannot parse 16-bits int value from \"%s\"", value));
             }
@@ -1322,7 +1322,7 @@ public abstract class TypeCodec<T> {
         @Override
         public Integer parse(String value) {
             try {
-                return value == null || value.isEmpty() || value.equals("NULL") ? null : Integer.parseInt(value);
+                return value == null || value.isEmpty() || value.equalsIgnoreCase("NULL") ? null : Integer.parseInt(value);
             } catch (NumberFormatException e) {
                 throw new InvalidTypeException(String.format("Cannot parse 32-bits int value from \"%s\"", value));
             }
@@ -1366,7 +1366,7 @@ public abstract class TypeCodec<T> {
 
         @Override
         public Date parse(String value) {
-            if (value == null || value.isEmpty() || value.equals("NULL"))
+            if (value == null || value.isEmpty() || value.equalsIgnoreCase("NULL"))
                 return null;
             // strip enclosing single quotes, if any
             if (value.charAt(0) == '\'' && value.charAt(value.length() - 1) == '\'')
@@ -1420,7 +1420,7 @@ public abstract class TypeCodec<T> {
 
         @Override
         public LocalDate parse(String value) {
-            if (value == null || value.isEmpty() || value.equals("NULL"))
+            if (value == null || value.isEmpty() || value.equalsIgnoreCase("NULL"))
                 return null;
 
             // single quotes are optional for long literals, mandatory for date patterns
@@ -1490,7 +1490,7 @@ public abstract class TypeCodec<T> {
 
         @Override
         public Long parse(String value) {
-            if (value == null || value.isEmpty() || value.equals("NULL"))
+            if (value == null || value.isEmpty() || value.equalsIgnoreCase("NULL"))
                 return null;
 
             // enclosing single quotes required, even for long literals
@@ -1534,7 +1534,7 @@ public abstract class TypeCodec<T> {
         @Override
         public UUID parse(String value) {
             try {
-                return value == null || value.isEmpty() || value.equals("NULL") ? null : UUID.fromString(value);
+                return value == null || value.isEmpty() || value.equalsIgnoreCase("NULL") ? null : UUID.fromString(value);
             } catch (IllegalArgumentException e) {
                 throw new InvalidTypeException(String.format("Cannot parse UUID value from \"%s\"", value), e);
             }
@@ -1626,7 +1626,7 @@ public abstract class TypeCodec<T> {
         @Override
         public BigInteger parse(String value) {
             try {
-                return value == null || value.isEmpty() || value.equals("NULL") ? null : new BigInteger(value);
+                return value == null || value.isEmpty() || value.equalsIgnoreCase("NULL") ? null : new BigInteger(value);
             } catch (NumberFormatException e) {
                 throw new InvalidTypeException(String.format("Cannot parse varint value from \"%s\"", value), e);
             }
@@ -1722,7 +1722,7 @@ public abstract class TypeCodec<T> {
 
         @Override
         public C parse(String value) {
-            if (value == null || value.isEmpty() || value.equals("NULL"))
+            if (value == null || value.isEmpty() || value.equalsIgnoreCase("NULL"))
                 return null;
 
             int idx = ParseUtils.skipSpaces(value, 0);
@@ -1862,7 +1862,7 @@ public abstract class TypeCodec<T> {
 
         @Override
         public Map<K, V> parse(String value) {
-            if (value == null || value.isEmpty() || value.equals("NULL"))
+            if (value == null || value.isEmpty() || value.equalsIgnoreCase("NULL"))
                 return null;
 
             int idx = ParseUtils.skipSpaces(value, 0);
@@ -2003,7 +2003,7 @@ public abstract class TypeCodec<T> {
 
         @Override
         public UDTValue parse(String value) {
-            if (value == null || value.isEmpty() || value.equals("NULL"))
+            if (value == null || value.isEmpty() || value.equalsIgnoreCase("NULL"))
                 return null;
 
             UDTValue v = definition.newValue();
@@ -2131,7 +2131,7 @@ public abstract class TypeCodec<T> {
 
         @Override
         public TupleValue parse(String value) {
-            if (value == null || value.isEmpty() || value.equals("NULL"))
+            if (value == null || value.isEmpty() || value.equalsIgnoreCase("NULL"))
                 return null;
 
             TupleValue v = definition.newValue();

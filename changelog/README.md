@@ -8,6 +8,7 @@
 - [new feature] Codec support for Java 8 (JAVA-606)
 - [new feature] Codec support for Java arrays (JAVA-565)
 - [new feature] Codec Support for JSON (JAVA-742)
+- [bug] TypeCodec.parse() implementations should be case insensitive when checking for keyword NULL (JAVA-972)
 
 ### 3.0.0-alpha4
 
