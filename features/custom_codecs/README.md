@@ -628,7 +628,7 @@ consider using prepared statements all the time.
 [CustomType]: http://docs.datastax.com/en/drivers/java/3.0/com/datastax/driver/core/DataType.CustomType.html
 [TypeToken]: http://docs.guava-libraries.googlecode.com/git/javadoc/com/google/common/reflect/TypeToken.html
 [SimpleStatement]: http://docs.datastax.com/en/drivers/java/3.0/com/datastax/driver/core/SimpleStatement.html
-[BuiltStatement]: http://docs.datastax.com/en/drivers/java/3.0/com/datastax/driver/core/BuiltStatement.html
+[BuiltStatement]: http://docs.datastax.com/en/drivers/java/3.0/com/datastax/driver/core/querybuilder/BuiltStatement.html
 [setList]: http://docs.datastax.com/en/drivers/java/3.0/com/datastax/driver/core/SettableByIndexData.html#setList(int,%20java.util.List)
 [setSet]: http://docs.datastax.com/en/drivers/java/3.0/com/datastax/driver/core/SettableByIndexData.html#setSet(int,%20java.util.Set)
 [setMap]: http://docs.datastax.com/en/drivers/java/3.0/com/datastax/driver/core/SettableByIndexData.html#setMap(int,%20java.util.Map)
