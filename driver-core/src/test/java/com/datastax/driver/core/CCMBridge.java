@@ -63,6 +63,10 @@ public class CCMBridge {
     public static final String DEFAULT_CLIENT_KEYSTORE_PASSWORD = "cassandra1sfun";
     public static final String DEFAULT_CLIENT_KEYSTORE_PATH = "/client.keystore";
 
+    // Contain the same keypair as the client keystore, but in format usable by OpenSSL
+    public static final File DEFAULT_CLIENT_PRIVATE_KEY_FILE = createTempStore("/client.key");
+    public static final File DEFAULT_CLIENT_CERT_CHAIN_FILE = createTempStore("/client.crt");
+
     public static final String DEFAULT_SERVER_TRUSTSTORE_PASSWORD = "cassandra1sfun";
     public static final String DEFAULT_SERVER_TRUSTSTORE_PATH = "/server.truststore";
 

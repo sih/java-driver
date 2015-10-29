@@ -16,21 +16,28 @@
 package com.datastax.driver.core;
 
 import io.netty.channel.socket.SocketChannel;
+import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 
 /**
- * Defines how the driver configures SSL connections.
- *
- * @see JdkSSLOptions
- * @see NettySSLOptions
+ * {@link SSLOptions} implementation based on Netty's SSL context.
+ * <p>
+ * Netty has the ability to use OpenSSL if available, instead of the JDK's built-in engine. This yields better performance.
  */
-public interface SSLOptions {
+public class NettySSLOptions implements SSLOptions {
+    private final SslContext context;
 
     /**
-     * Creates a new SSL handler for the given channel.
+     * Create a new instance from a given context.
      *
-     * @param channel the channel.
-     * @return the handler.
+     * @param context the Netty context. See the static {@code SslContext.newClientContext()} methods to build an instance.
      */
-    SslHandler newSSLHandler(SocketChannel channel);
+    public NettySSLOptions(SslContext context) {
+        this.context = context;
+    }
+
+    @Override
+    public SslHandler newSSLHandler(SocketChannel channel) {
+        return context.newHandler(channel.alloc());
+    }
 }
