@@ -15,22 +15,17 @@
  */
 package com.datastax.driver.osgi;
 
-import ch.qos.logback.classic.Logger;
-import ch.qos.logback.classic.LoggerContext;
-import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.Appender;
-import ch.qos.logback.core.AppenderBase;
 import org.ops4j.pax.exam.Configuration;
 import org.ops4j.pax.exam.Option;
 import org.ops4j.pax.exam.testng.listener.PaxExam;
-import org.slf4j.LoggerFactory;
 import org.testng.annotations.Listeners;
 import org.testng.annotations.Test;
+
 import static org.ops4j.pax.exam.CoreOptions.options;
 import static org.testng.Assert.assertTrue;
+import static org.testng.Assert.fail;
 
 import com.datastax.driver.core.Cluster;
-import com.datastax.driver.core.SanityChecks;
 
 import static com.datastax.driver.osgi.BundleOptions.defaultOptions;
 import static com.datastax.driver.osgi.BundleOptions.driverBundle;
@@ -74,7 +69,9 @@ public class GuavaSanityCheckNegativeIT {
     /**
      * <p>
      * Validates that the driver is able to detect that the guava library in the classpath is
-     * less than version 16.01 and logs an error in this case.
+     * less than version 16.01 and throws an {@link IllegalStateException} in this case and
+     * is raised as the cause of an {@link ExceptionInInitializerError} since the failure
+     * occurs at static initialization.
      * </p>
      *
      * The following configurations are tried (defined via methods with the @Configuration annotation):
@@ -85,33 +82,21 @@ public class GuavaSanityCheckNegativeIT {
      * </ol>
      *
      * @test_category packaging
-     * @expected_result A message is logged at error level indicating guava version is out of date.
+     * @expected_result An {@link IllegalStateException} is thrown.
      * @jira_ticket JAVA-961
      * @since 3.0.0-beta1
      */
-    public void should_log_guava_version_error_if_lt_16_0_1() {
-        LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
-        Logger logger = (Logger)LoggerFactory.getLogger(SanityChecks.class);
-
-        final StringBuilder events = new StringBuilder();
-        Appender<ILoggingEvent> appender = new AppenderBase<ILoggingEvent>() {
-            @Override
-            protected void append(ILoggingEvent eventObject) {
-                events.append(eventObject.toString());
-            }
-        };
-        appender.setContext(lc);
-        appender.start();
-        logger.addAppender(appender);
-
+    public void should_raise_guava_version_error_if_lt_16_0_1() throws Throwable {
         try {
             Cluster.builder();
+            fail("Expected an IllegalStateException for Guava version incompatibility");
         }
-        catch(Throwable e) {
-            // A NoClassDef error can occur at older guava versions, ignore these.
-        } finally {
-            appender.stop();
-            assertTrue(events.toString().contains("Detected Guava issue #1635"));
+        catch(ExceptionInInitializerError e) {
+            try {
+                throw e.getCause();
+            } catch(IllegalStateException ise) {
+                assertTrue(ise.getMessage().contains("Detected Guava issue #1635"));
+            }
         }
     }
 }
