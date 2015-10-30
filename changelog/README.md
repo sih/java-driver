@@ -4,7 +4,8 @@
 
 - [improvement] JAVA-958: Make TableOrView.Order visible.
 - [improvement] JAVA-968: Update metrics to the latest version.
-- [improvement] Refactor SSLOptions API (JAVA-841, JAVA-948)
+- [improvement] JAVA-841: Refactor SSLOptions API.
+- [improvement] JAVA-948: Don't limit cipher suites by default.
 
 
 ### 3.0.0-alpha4
