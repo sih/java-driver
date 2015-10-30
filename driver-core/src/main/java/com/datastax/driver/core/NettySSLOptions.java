@@ -30,7 +30,7 @@ public class NettySSLOptions implements SSLOptions {
     /**
      * Create a new instance from a given context.
      *
-     * @param context the Netty context. See the static {@code SslContext.newClientContext()} methods to build an instance.
+     * @param context the Netty context. {@code SslContextBuilder.forClient()} provides a fluent API to build it.
      */
     public NettySSLOptions(SslContext context) {
         this.context = context;
