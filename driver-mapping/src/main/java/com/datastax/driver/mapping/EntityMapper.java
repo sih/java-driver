@@ -25,7 +25,8 @@ import static com.datastax.driver.core.querybuilder.QueryBuilder.quote;
 abstract class EntityMapper<T> {
 
     public final Class<T> entityClass;
-    private final String keyspace;
+    // sih-set-ks: Remove final modifier to allow keyspace to be set
+    private String keyspace;
     private final String table;
 
     public final ConsistencyLevel writeConsistency;
@@ -45,6 +46,17 @@ abstract class EntityMapper<T> {
         this.readConsistency = readConsistency;
     }
 
+    /**
+     * sih-set-ks
+     * Allow setting of keyspace e.g. so that a test keyspace can be specified in 
+     * unit tests
+     * @param The name of a keyspace that already exists
+     */
+    public void setKeyspace(final String keyspace) {
+    	this.keyspace = keyspace;
+    }
+    
+    
     public String getKeyspace() {
         return quote(keyspace);
     }

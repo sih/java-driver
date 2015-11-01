@@ -700,6 +700,15 @@ public class Mapper<T> {
     public void resetDefaultDeleteOptions() {
         this.defaultDeleteOptions = NO_OPTIONS;
     }
+    
+    /**
+     * sih-set-ks
+     * Provide a delegate to the {@code}EntityMapper keyspace
+     * @param The name of a keyspace that already exists
+     */
+    public void setKeyspace(final String keyspace) {
+    	this.mapper.setKeyspace(keyspace);
+    }
 
     private static EnumMap<Option.Type, Option> toMap(Option[] options) {
         EnumMap<Option.Type, Option> result = new EnumMap<Option.Type, Option>(Option.Type.class);
