@@ -136,6 +136,13 @@ public class Mapper<T> {
     public TableMetadata getTableMetadata() {
         return tableMetadata;
     }
+    
+    /**
+     * sih-set-ks
+     */
+    public String getKeyspaceName() {
+    	return mapper.getKeyspace();
+    }
 
     /**
      * The {@code MappingManager} managing this mapper.
