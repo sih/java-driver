@@ -143,6 +143,13 @@ public class Mapper<T> {
     public String getKeyspaceName() {
     	return mapper.getKeyspace();
     }
+    
+    /**
+     * sih-set-ks
+     */
+    public String getTableName() {
+    	return mapper.getTable();
+    }
 
     /**
      * The {@code MappingManager} managing this mapper.
